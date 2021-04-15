@@ -2,22 +2,23 @@
 
     "Output Folder": "FSI_FIN_I2SPH",
 
+    // dm, g
 
     "Physical Properties of Fluid": {
-        "Density": 1000,
-        "Viscosity": 0.001,
+        "Density": 1000, // g/dm^3, 1000 kg/m^3
+        "Viscosity": 0.1, // g/dm/s, 0.001 kg/m/s
         "Body Force": [ 0.0, 0.0, 0.0 ],
-        "Gravity": [ 0.0, 0.0, -9.81 ],
+        "Gravity": [ 0.0, 0.0, -98.1 ], // dm/s^2, 9.81 m/s^2
         "Surface Tension Kappa": 0.0,
         "Characteristic Length": 1.0
     },
 
     "SPH Parameters": {
         "Method": "I2SPH", //WCSPH, IISPH, I2SPHH
-        "Kernel h": 0.025,
-        "Initial Spacing": 0.025,
-        "Epsilon": 0.001,
-        "Maximum Velocity": 1.0,
+        "Kernel h": 0.025, // dm, 2.5mm
+        "Initial Spacing": 0.025, // dm, 2.5mm
+        "Epsilon": 0.001, // dm, 0.1mm, minimum particle distance
+        "Maximum Velocity": 1.0, // dm/s, 100mm/s
         "XSPH Coefficient": 0.5,
         "Shifting Coefficient": 0.0,
         "Density Reinitialization": 200,
@@ -32,7 +33,7 @@
         "Fluid time step": 10e-4,
         "Solid time step": 10e-4,
         "Maximum time step": 10e-4,
-        "End time": 1.2,
+        "End time": 0.7,
         "Write frame per second": 100
     },
 

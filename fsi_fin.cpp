@@ -31,32 +31,37 @@ const std::string outs_dir = "FSI_FIN/"; // Directory for outputs
 std::string out_dir; // Directory for this simulation
 
 // Parameters
+double M_TO_L = 1e1; // dm
+double KG_TO_W = 1e3; // gram
+
 // Simulation domain dimension
-Real bxDim = 1;
-Real byDim = 1;
-Real bzDim = 1;
+Real bxDim = 0.1 * M_TO_L;
+Real byDim = 0.1 * M_TO_L;
+Real bzDim = 0.1 * M_TO_L;
 
 // Fluid domain dimension
-Real fxDim = 1.1;
-Real fyDim = 1.5;
-Real fzDim = 1.0;
+Real fxDim = 0.11 * M_TO_L;
+Real fyDim = 0.15 * M_TO_L;
+Real fzDim = 0.1 * M_TO_L;
 
 // Solid materials
-double E = 6e8;
+double E = 1e8 * KG_TO_W / M_TO_L;
 double nu = 0.3;
-double rhoSolid = 8000;
+double rhoSolid = 2000 * KG_TO_W / M_TO_L /  M_TO_L / M_TO_L;
 
 // Solid Dimension
-double beamLength = 0.3;
-double beamThickness = 0.0125; // space / 2
-double beamArcLength = 0.3;
-double beamRadius = 0.1;
-double flapLength = 0.4;
-double flapHeight = 0.3; // beamRadius * sin(beamAngle / 2) * 2
+double beamLength = 0.03 * M_TO_L;
+double beamThickness = 0.0005 * M_TO_L; // space / 2
+double beamArcLength = 0.03 * M_TO_L;
+double beamRadius = 0.01 * M_TO_L;
+double flapLength = 0.04 * M_TO_L;
+double flapHeight = 0.03 * M_TO_L; // beamRadius * sin(beamAngle / 2) * 2
 
-double freq = 1.0; // Swing frequency
+double freq = 2.0; // Swing frequency
 double ts = 0.2; // Wait for fluid to settle
-double amplitude = 0.5;
+double amplitude = 0.05 * M_TO_L;
+
+double wallOffset = 0.05 * M_TO_L;
 
 class ChFunction_Motor : public ChFunction {
 public:
@@ -329,38 +334,38 @@ int main(int argc, char* argv[]) {
 	mphysicalSystem.Set_G_acc(gravity);
 
 	// Set common material Properties
-	auto surfMat = chrono_types::make_shared<ChMaterialSurfaceSMC>();
-	surfMat->SetYoungModulus(1e8);
-	surfMat->SetFriction(0.2f);
-	surfMat->SetRestitution(0.05f);
-	surfMat->SetAdhesion(0);
+	//auto surfMat = chrono_types::make_shared<ChMaterialSurfaceSMC>();
+	//surfMat->SetYoungModulus(1e8);
+	//surfMat->SetFriction(0.2f);
+	//surfMat->SetRestitution(0.05f);
+	//surfMat->SetAdhesion(0);
 
 	// Container body
 	auto container = chrono_types::make_shared<ChBody>();
 	container->SetIdentifier(-1);
 	container->SetBodyFixed(true);
-	container->SetCollide(true);
-	container->GetCollisionModel()->ClearModel();
+	//container->SetCollide(true);
+	//container->GetCollisionModel()->ClearModel();
 
 	// Container wall geometry
 	// Wall should be 1 space away from the boundary particles
 	ChVector<> sizeHalfBtm(fxDim / 2 + space * 3, fyDim / 2 + space * 3, space * 2);
 	ChVector<> posBtm(0, 0, -sizeHalfBtm.z() - space);
 
-	ChVector<> sizeHalfLeft(space * 2, fyDim / 2, fzDim / 2 + 0.5);
+	ChVector<> sizeHalfLeft(space * 2, fyDim / 2, fzDim / 2 + wallOffset);
 	ChVector<> posLeft(-fxDim / 2 - sizeHalfLeft.x() - space, 0, sizeHalfLeft.z());
 	ChVector<> posRight(-posLeft.x(), posLeft.y(), posLeft.z());
 
-	ChVector<> sizeHalfBack(fxDim / 2 + space * 3, space * 2, fzDim / 2 + 0.5);
+	ChVector<> sizeHalfBack(fxDim / 2 + space * 3, space * 2, fzDim / 2 + wallOffset);
 	ChVector<> posBack(0, -fyDim / 2 - sizeHalfBack.y() - space, sizeHalfBack.z());
 	ChVector<> posFront(posBack.x(), -posBack.y(), posBack.z());
 
 	// Add wall collision geometry 
-	chrono::utils::AddBoxGeometry(container.get(), surfMat, sizeHalfBtm, posBtm, chrono::QUNIT, true);
-	chrono::utils::AddBoxGeometry(container.get(), surfMat, sizeHalfLeft, posLeft, chrono::QUNIT, true);
-	chrono::utils::AddBoxGeometry(container.get(), surfMat, sizeHalfLeft, posRight, chrono::QUNIT, true);
-	chrono::utils::AddBoxGeometry(container.get(), surfMat, sizeHalfBack, posBack, chrono::QUNIT, true);
-	chrono::utils::AddBoxGeometry(container.get(), surfMat, sizeHalfBack, posFront, chrono::QUNIT, true);
+	//chrono::utils::AddBoxGeometry(container.get(), surfMat, sizeHalfBtm, posBtm, chrono::QUNIT, true);
+	//chrono::utils::AddBoxGeometry(container.get(), surfMat, sizeHalfLeft, posLeft, chrono::QUNIT, true);
+	//chrono::utils::AddBoxGeometry(container.get(), surfMat, sizeHalfLeft, posRight, chrono::QUNIT, true);
+	//chrono::utils::AddBoxGeometry(container.get(), surfMat, sizeHalfBack, posBack, chrono::QUNIT, true);
+	//chrono::utils::AddBoxGeometry(container.get(), surfMat, sizeHalfBack, posFront, chrono::QUNIT, true);
 
 	// Only add BCE on specified box surface, 12 means top, -12 means bottom, default 3 layers inward
 	fsi::utils::AddBoxBce(myFsiSystem.GetDataManager(), paramsH, container, posBtm, chrono::QUNIT, sizeHalfBtm, 12);
