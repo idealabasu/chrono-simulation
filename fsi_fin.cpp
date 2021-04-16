@@ -40,28 +40,30 @@ Real byDim = 0.1 * M_TO_L;
 Real bzDim = 0.1 * M_TO_L;
 
 // Fluid domain dimension
-Real fxDim = 0.11 * M_TO_L;
+Real fxDim = 0.13 * M_TO_L;
 Real fyDim = 0.15 * M_TO_L;
 Real fzDim = 0.1 * M_TO_L;
 
 // Solid materials
 double E = 1e8 * KG_TO_W / M_TO_L;
 double nu = 0.3;
-double rhoSolid = 2000 * KG_TO_W / M_TO_L /  M_TO_L / M_TO_L;
+double rhoSolid = 1500 * KG_TO_W / M_TO_L /  M_TO_L / M_TO_L;
 
 // Solid Dimension
 double beamLength = 0.03 * M_TO_L;
 double beamThickness = 0.0005 * M_TO_L; // space / 2
 double beamArcLength = 0.03 * M_TO_L;
-double beamRadius = 0.01 * M_TO_L;
-double flapLength = 0.04 * M_TO_L;
-double flapHeight = 0.03 * M_TO_L; // beamRadius * sin(beamAngle / 2) * 2
+double beamAngle = 150.0 * CH_C_PI / 180.0;
+double beamRadius = beamArcLength / beamAngle;
+double flapLength = 0.05 * M_TO_L;
+double flapHeight = 0.04 * M_TO_L; // beamRadius * sin(beamAngle / 2) * 2
 
 double freq = 2.0; // Swing frequency
 double ts = 0.2; // Wait for fluid to settle
 double amplitude = 0.05 * M_TO_L;
 
 double wallOffset = 0.05 * M_TO_L;
+double zOffset = 0.01 * M_TO_L;
 
 class ChFunction_Motor : public ChFunction {
 public:
@@ -241,12 +243,12 @@ int main(int argc, char* argv[]) {
 	fsi::utils::FinalizeDomain(paramsH);
 	fsi::utils::PrepareOutputDir(paramsH, out_dir, outs_dir, inputJson);
 
-	double beamAngle = beamArcLength / beamRadius;
+	//double beamAngle = beamArcLength / beamRadius;
 	double flapThickness = beamRadius - beamRadius * cos(beamAngle / 2);
 	double beamDx = -(beamLength + flapLength) / 2;
 	double beamDy = -amplitude - beamRadius + flapThickness / 2;
 	double beamDAngle = 0.0;
-	double beamDz = fzDim / 2; // Offset  midpoint of arc to center of container
+	double beamDz = fzDim / 2 - zOffset; // Offset  midpoint of arc to center of container
 
 	// Vector of beam axis  
 	ChVector<> beamA1(beamDx, beamDy, beamDz); // One end point of beam axis
