@@ -234,7 +234,7 @@ int main(int argc, char* argv[]) {
 
 	// Ceneter of boundary domain is the center of fluid
 	// Leave spaces for wall BCE if needed
-	double eps = space / 1;
+	double eps = space * 4;
 	paramsH->cMin = chrono::fsi::mR3(-bxDim / 2 - eps, -byDim / 2 - eps,  - bzDim / 2 - eps);
 	paramsH->cMax = chrono::fsi::mR3(bxDim / 2 + eps, byDim / 2 + eps, bzDim / 2 + eps);
 
@@ -347,16 +347,13 @@ int main(int argc, char* argv[]) {
 	mphysicalSystem.AddBody(container);
 
 	// Only add BCE on specified box surface, 12 means top, -12 means bottom, default 3 layers inward
-	//fsi::utils::AddBoxBce(myFsiSystem.GetDataManager(), paramsH, container, chrono::VNULL, chrono::QUNIT, sizeHalfContainer, -12);
-	//fsi::utils::AddBoxBce(myFsiSystem.GetDataManager(), paramsH, container, chrono::VNULL, chrono::QUNIT, sizeHalfContainer, 23);
-	//fsi::utils::AddBoxBce(myFsiSystem.GetDataManager(), paramsH, container, chrono::VNULL, chrono::QUNIT, sizeHalfContainer, -23);
-	//fsi::utils::AddBoxBce(myFsiSystem.GetDataManager(), paramsH, container, chrono::VNULL, chrono::QUNIT, sizeHalfContainer, 13);
-	//fsi::utils::AddBoxBce(myFsiSystem.GetDataManager(), paramsH, container, chrono::VNULL, chrono::QUNIT, sizeHalfContainer, -13);
+	fsi::utils::AddBoxBce(myFsiSystem.GetDataManager(), paramsH, container, chrono::VNULL, chrono::QUNIT, sizeHalfContainer, -12);
+	fsi::utils::AddBoxBce(myFsiSystem.GetDataManager(), paramsH, container, chrono::VNULL, chrono::QUNIT, sizeHalfContainer, 12, false, true);
+	fsi::utils::AddBoxBce(myFsiSystem.GetDataManager(), paramsH, container, chrono::VNULL, chrono::QUNIT, sizeHalfContainer, 23, false, true);
+	fsi::utils::AddBoxBce(myFsiSystem.GetDataManager(), paramsH, container, chrono::VNULL, chrono::QUNIT, sizeHalfContainer, -23, false, true);
+	fsi::utils::AddBoxBce(myFsiSystem.GetDataManager(), paramsH, container, chrono::VNULL, chrono::QUNIT, sizeHalfContainer, 13, false, true);
+	fsi::utils::AddBoxBce(myFsiSystem.GetDataManager(), paramsH, container, chrono::VNULL, chrono::QUNIT, sizeHalfContainer, -13, false, true);
 
-	// Add a few BCEs at the corner to make sure rigid BCE files are written
-	// Hopefully this won't effect the simulation physics
-	fsi::utils::AddBoxBce(myFsiSystem.GetDataManager(), paramsH, container, ChVector<>(fxDim / 2 + space * 2, fyDim / 2 + space * 2, 0), chrono::QUNIT, ChVector<>(space, space, sizeHalfContainer.z()), 12);
-	
 	// Slider
 	auto slider = chrono_types::make_shared<ChBodyEasyBox>(0.1, 0.1, 0.1, rhoSolid);
 	slider->SetPos(ChVector<>(0, 0, 0));
