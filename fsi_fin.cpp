@@ -31,21 +31,22 @@ const std::string outs_dir = "FSI_FIN/"; // Directory for outputs
 std::string out_dir; // Directory for this simulation
 
 // Parameters
-double M_TO_L = 1e1; // dm
-double KG_TO_W = 1e3; // gram
-
-// Simulation domain dimension
-Real bxDim = 0.1 * M_TO_L;
-Real byDim = 0.1 * M_TO_L;
-Real bzDim = 0.1 * M_TO_L;
+double M_TO_L = 1e2; // cm
+double KG_TO_W = 1e3; // 1 gram
+double S_TO_T = 1e0; // 1s
 
 // Fluid domain dimension
-Real fxDim = 0.13 * M_TO_L;
+Real fxDim = 0.11 * M_TO_L;
 Real fyDim = 0.15 * M_TO_L;
-Real fzDim = 0.1 * M_TO_L;
+Real fzDim = 0.08 * M_TO_L;
+
+// Simulation domain dimension
+Real bxDim = fxDim;
+Real byDim = fyDim;
+Real bzDim = fzDim;
 
 // Solid materials
-double E = 1e8 * KG_TO_W / M_TO_L;
+double E = 2e8 * KG_TO_W / M_TO_L / S_TO_T / S_TO_T; // kg*m/s^2/m^2
 double nu = 0.3;
 double rhoSolid = 1500 * KG_TO_W / M_TO_L /  M_TO_L / M_TO_L;
 
@@ -59,11 +60,11 @@ double flapLength = 0.05 * M_TO_L;
 double flapHeight = 0.04 * M_TO_L; // beamRadius * sin(beamAngle / 2) * 2
 
 double freq = 2.0; // Swing frequency
-double ts = 0.2; // Wait for fluid to settle
+double ts = 0.0 * S_TO_T; // Wait for fluid to settle
 double amplitude = 0.05 * M_TO_L;
 
 double wallOffset = 0.05 * M_TO_L;
-double zOffset = 0.01 * M_TO_L;
+double zOffset = 0.0 * M_TO_L;
 
 class ChFunction_Motor : public ChFunction {
 public:
@@ -195,7 +196,7 @@ void writeForce(
 	char dataBuffer[256];
 
 	ChVector<> totalForce = joint->Get_react_force();
-	printf("\n%f, %f, %f\n", totalForce.x(), totalForce.y(), totalForce.z());
+	//printf("\n%f, %f, %f\n", totalForce.x(), totalForce.y(), totalForce.z());
 
 	std::ofstream dataFile;
 	snprintf(dataBuffer, sizeof(char) * 256, (out_dir + "/Data.csv").c_str());
@@ -232,9 +233,11 @@ int main(int argc, char* argv[]) {
 	// Space between particles
 	Real space = paramsH->MULT_INITSPACE * paramsH->HSML;
 
-	// Make boundary domain large
-	paramsH->cMin = chrono::fsi::mR3(-bxDim / 2, -byDim / 2, -bzDim / 2) * 10;
-	paramsH->cMax = chrono::fsi::mR3(bxDim / 2, byDim / 2, bzDim / 2) * 10;
+	// Ceneter of boundary domain is the center of fluid
+	// Leave spaces for wall BCE if needed
+	double eps = space * 4;
+	paramsH->cMin = chrono::fsi::mR3(-bxDim / 2 - eps, -byDim / 2 - eps,  - bzDim / 2 - eps) * 10;
+	paramsH->cMax = chrono::fsi::mR3(bxDim / 2 + eps, byDim / 2 + eps, bzDim / 2 + eps) * 10;
 
 	// Finalize params and output dir
 	myFsiSystem.SetFluidDynamics(paramsH->fluid_dynamic_type);
@@ -248,7 +251,7 @@ int main(int argc, char* argv[]) {
 	double beamDx = -(beamLength + flapLength) / 2;
 	double beamDy = -amplitude - beamRadius + flapThickness / 2;
 	double beamDAngle = 0.0;
-	double beamDz = fzDim / 2 - zOffset; // Offset  midpoint of arc to center of container
+	double beamDz = zOffset; // Offset  midpoint of arc to center of container
 
 	// Vector of beam axis  
 	ChVector<> beamA1(beamDx, beamDy, beamDz); // One end point of beam axis
@@ -262,7 +265,7 @@ int main(int argc, char* argv[]) {
 	ChVector<> posFlap(beamLength / 2, beamDy + beamRadius - flapThickness / 2, beamDz);
 
 	// Create Fluid region and discretize with SPH particles
-	ChVector<> boxCenter(0.0, 0.0, fzDim / 2);
+	ChVector<> boxCenter(0.0, 0.0, 0.0);
 	ChVector<> boxHalfDim(fxDim / 2, fyDim / 2, fzDim / 2);
 	utils::GridSampler<> sampler(space);
 	utils::Generator::PointVector points = sampler.SampleBox(boxCenter, boxHalfDim); // Use a chrono sampler to create a bucket of points
@@ -271,12 +274,13 @@ int main(int argc, char* argv[]) {
 	int numPartAdded = 0;
 	for (int i = 0; i < points.size(); i++) {
 		// Calculate the pressure of a steady state (p = rho*g*h)
-		Real pre_ini = paramsH->rho0 * abs(paramsH->gravity.z) * (-points[i].z() + fzDim);
-		// Real rho_ini = paramsH->rho0 + pre_ini / (paramsH->Cs * paramsH->Cs);
-		// Real pre_ini = paramsH->BASEPRES;
+		//Real pre_ini = paramsH->rho0 * abs(paramsH->gravity.z) * (-points[i].z() + fzDim / 2);
+		//Real rho_ini = paramsH->rho0 + pre_ini / (paramsH->Cs * paramsH->Cs);
+		Real pre_ini = paramsH->BASEPRES;
 		Real rho_ini = paramsH->rho0;
 
 		// Skip if too close to body
+		double gap = space * 1;
 		// Beam
 		bool noContact = true;
 		ChVector<> pt = points[i] - beamA1;
@@ -284,12 +288,12 @@ int main(int argc, char* argv[]) {
 		Real cross = (pt % beamA).Length(); // Distance to beam beam axis
 		double angle = atan2(pt.y(), pt.z());
 		if (
-			dot <= beamLength + space && // Length
-			dot >= 0 - space &&
-			cross <= beamRadius + space && // Ring
-			cross >= beamRadius - space &&
-			angle >= (CH_C_PI - beamAngle) / 2 + beamDAngle - space / beamRadius && // Arc
-			angle <= (CH_C_PI + beamAngle) / 2 + beamDAngle + space / beamRadius
+			dot <= beamLength + gap && // Length
+			dot >= 0 - gap &&
+			cross <= beamRadius + gap && // Ring
+			cross >= beamRadius - gap &&
+			angle >= (CH_C_PI - beamAngle) / 2 + beamDAngle - gap / beamRadius && // Arc
+			angle <= (CH_C_PI + beamAngle) / 2 + beamDAngle + gap / beamRadius
 			) {
 			//printf("\n%f, %f, %f\n", pt.x(), pt.y(), pt.z());
 			//printf("\n%f, %f\n", dot, cross);
@@ -297,12 +301,12 @@ int main(int argc, char* argv[]) {
 		}
 		// Flap
 		if (
-			points[i].x() <= posFlap.x() + sizeHalfFlap.x() + space && // Length
-			points[i].x() >= posFlap.x() - sizeHalfFlap.x() - space &&
-			points[i].y() <= posFlap.y() + sizeHalfFlap.y() + space && // Thickness
-			points[i].y() >= posFlap.y() - sizeHalfFlap.y() - space &&
-			points[i].z() <= posFlap.z() + sizeHalfFlap.z() + space && // Height
-			points[i].z() >= posFlap.z() - sizeHalfFlap.z() - space
+			points[i].x() <= posFlap.x() + sizeHalfFlap.x() + gap && // Length
+			points[i].x() >= posFlap.x() - sizeHalfFlap.x() - gap &&
+			points[i].y() <= posFlap.y() + sizeHalfFlap.y() + gap && // Thickness
+			points[i].y() >= posFlap.y() - sizeHalfFlap.y() - gap &&
+			points[i].z() <= posFlap.z() + sizeHalfFlap.z() + gap && // Height
+			points[i].z() >= posFlap.z() - sizeHalfFlap.z() - gap
 			) {
 			noContact = false;
 		}
@@ -331,55 +335,29 @@ int main(int argc, char* argv[]) {
 	}
 
 	// Create Solid
-	//ChVector<> gravity = ChVector<>(paramsH->gravity.x, paramsH->gravity.y, paramsH->gravity.z);
-	ChVector<> gravity = ChVector<>(0.0, 0.0, 0.0);
+	ChVector<> gravity = ChVector<>(paramsH->gravity.x, paramsH->gravity.y, paramsH->gravity.z);
+	//ChVector<> gravity = ChVector<>(0.0, 0.0, 0.0);
 	mphysicalSystem.Set_G_acc(gravity);
 
-	// Set common material Properties
-	//auto surfMat = chrono_types::make_shared<ChMaterialSurfaceSMC>();
-	//surfMat->SetYoungModulus(1e8);
-	//surfMat->SetFriction(0.2f);
-	//surfMat->SetRestitution(0.05f);
-	//surfMat->SetAdhesion(0);
-
 	// Container body
-	auto container = chrono_types::make_shared<ChBody>();
-	container->SetIdentifier(-1);
-	container->SetBodyFixed(true);
-	//container->SetCollide(true);
-	//container->GetCollisionModel()->ClearModel();
-
-	// Container wall geometry
 	// Wall should be 1 space away from the boundary particles
-	ChVector<> sizeHalfBtm(fxDim / 2 + space * 3, fyDim / 2 + space * 3, space * 2);
-	ChVector<> posBtm(0, 0, -sizeHalfBtm.z() - space);
-
-	ChVector<> sizeHalfLeft(space * 2, fyDim / 2, fzDim / 2 + wallOffset);
-	ChVector<> posLeft(-fxDim / 2 - sizeHalfLeft.x() - space, 0, sizeHalfLeft.z());
-	ChVector<> posRight(-posLeft.x(), posLeft.y(), posLeft.z());
-
-	ChVector<> sizeHalfBack(fxDim / 2 + space * 3, space * 2, fzDim / 2 + wallOffset);
-	ChVector<> posBack(0, -fyDim / 2 - sizeHalfBack.y() - space, sizeHalfBack.z());
-	ChVector<> posFront(posBack.x(), -posBack.y(), posBack.z());
-
-	// Add wall collision geometry 
-	//chrono::utils::AddBoxGeometry(container.get(), surfMat, sizeHalfBtm, posBtm, chrono::QUNIT, true);
-	//chrono::utils::AddBoxGeometry(container.get(), surfMat, sizeHalfLeft, posLeft, chrono::QUNIT, true);
-	//chrono::utils::AddBoxGeometry(container.get(), surfMat, sizeHalfLeft, posRight, chrono::QUNIT, true);
-	//chrono::utils::AddBoxGeometry(container.get(), surfMat, sizeHalfBack, posBack, chrono::QUNIT, true);
-	//chrono::utils::AddBoxGeometry(container.get(), surfMat, sizeHalfBack, posFront, chrono::QUNIT, true);
-
-	// Only add BCE on specified box surface, 12 means top, -12 means bottom, default 3 layers inward
-	fsi::utils::AddBoxBce(myFsiSystem.GetDataManager(), paramsH, container, posBtm, chrono::QUNIT, sizeHalfBtm, 12);
-	fsi::utils::AddBoxBce(myFsiSystem.GetDataManager(), paramsH, container, posLeft, chrono::QUNIT, sizeHalfLeft, 23);
-	fsi::utils::AddBoxBce(myFsiSystem.GetDataManager(), paramsH, container, posRight, chrono::QUNIT, sizeHalfLeft, -23);
-	fsi::utils::AddBoxBce(myFsiSystem.GetDataManager(), paramsH, container, posBack, chrono::QUNIT, sizeHalfBack, 13);
-	fsi::utils::AddBoxBce(myFsiSystem.GetDataManager(), paramsH, container, posFront, chrono::QUNIT, sizeHalfBack, -13);
-
+	ChVector<> sizeHalfContainer(fxDim / 2 + space * 3, fyDim / 2 + space * 3, fzDim / 2 + space * 3 + wallOffset / 2);
+	ChVector<> posContainer(0, 0, wallOffset / 2);
+	auto container = chrono_types::make_shared<ChBodyEasyBox>(sizeHalfContainer.x() * 2, sizeHalfContainer.y() * 2, sizeHalfContainer.z() * 2, rhoSolid);
+	container->SetPos(posContainer);
+	container->SetBodyFixed(true);
 	mphysicalSystem.AddBody(container);
 
+	// Only add BCE on specified box surface, 12 means top, -12 means bottom, default 3 layers inward
+	fsi::utils::AddBoxBce(myFsiSystem.GetDataManager(), paramsH, container, chrono::VNULL, chrono::QUNIT, sizeHalfContainer, -12);
+	//fsi::utils::AddBoxBce(myFsiSystem.GetDataManager(), paramsH, container, chrono::VNULL, chrono::QUNIT, sizeHalfContainer, 12, false, true);
+	fsi::utils::AddBoxBce(myFsiSystem.GetDataManager(), paramsH, container, chrono::VNULL, chrono::QUNIT, sizeHalfContainer, 23, false, true);
+	fsi::utils::AddBoxBce(myFsiSystem.GetDataManager(), paramsH, container, chrono::VNULL, chrono::QUNIT, sizeHalfContainer, -23, false, true);
+	fsi::utils::AddBoxBce(myFsiSystem.GetDataManager(), paramsH, container, chrono::VNULL, chrono::QUNIT, sizeHalfContainer, 13, false, true);
+	fsi::utils::AddBoxBce(myFsiSystem.GetDataManager(), paramsH, container, chrono::VNULL, chrono::QUNIT, sizeHalfContainer, -13, false, true);
+
 	// Slider
-	auto slider = chrono_types::make_shared<ChBodyEasyBox>(0.1, 0.1, 0.1, rhoSolid);
+	auto slider = chrono_types::make_shared<ChBodyEasyBox>(0.0 * M_TO_L, 0.0 * M_TO_L, 0.0 * M_TO_L, rhoSolid);
 	slider->SetPos(ChVector<>(0, 0, 0));
 	mphysicalSystem.AddBody(slider);
 
@@ -535,15 +513,13 @@ int main(int argc, char* argv[]) {
 	//return 0;
 
 	// Start the simulation
-	Real time = 0;
-	int stepEnd = int(paramsH->tFinal / paramsH->dT);
-	int stepSave = int(1.0 / paramsH->out_fps / paramsH->dT);
-	for (int tStep = 0; tStep < stepEnd + 1; tStep++) {
-		int frameCurrent = int(tStep / stepSave);
-		printf("\nstep: %d, time: %f (s) current frame: %d\n", tStep, time, frameCurrent);
-		//printf("\n%f, %f, %f\n", slider->GetPos().x(), slider->GetPos().y(), slider->GetPos().z());
-
-		if (tStep % stepSave == 0) {
+	double time = 0;
+	int frameCurrent = -1;
+	double tFrame = 1.0 / paramsH->out_fps;
+	while (time < paramsH->tFinal) {
+		int frameNew = (int)(time / tFrame);
+		if (frameNew > frameCurrent) {
+			frameCurrent = frameNew;
 			// Save outputs
 			fsi::utils::PrintToFile(
 				myFsiSystem.GetDataManager()->sphMarkersD2->posRadD,
@@ -560,12 +536,15 @@ int main(int argc, char* argv[]) {
 			writeForce(motor, frameCurrent);
 		}
 
+		printf("\nstep: %f, time: %f, current frame: %d\n", paramsH->dT, time, frameCurrent);
+		//printf("\n%f, %f, %f\n", slider->GetPos().x(), slider->GetPos().y(), slider->GetPos().z());
+
 		// Call the FSI solver
 		try {
 			myFsiSystem.DoStepDynamics_FSI();
 		}
 		catch (const std::exception& e) {
-			printf("%s\n", e.what());
+			printf("ERROR: %s\n", e.what());
 			return 0;
 		}
 		time += paramsH->dT;
