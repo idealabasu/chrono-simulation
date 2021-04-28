@@ -36,9 +36,9 @@ double KG_TO_W = 1e3; // 1 gram
 double S_TO_T = 1e0; // 1s
 
 // Fluid domain dimension
-Real fxDim = 0.11 * M_TO_L;
-Real fyDim = 0.15 * M_TO_L;
-Real fzDim = 0.08 * M_TO_L;
+Real fxDim = 0.20 * M_TO_L;
+Real fyDim = 0.10 * M_TO_L;
+Real fzDim = 0.07 * M_TO_L;
 
 // Simulation domain dimension
 Real bxDim = fxDim;
@@ -51,17 +51,13 @@ double nu = 0.3;
 double rhoSolid = 1500 * KG_TO_W / M_TO_L /  M_TO_L / M_TO_L;
 
 // Solid Dimension
-double beamLength = 0.03 * M_TO_L;
+double beamLength = 0.15 * M_TO_L;
 double beamThickness = 0.0005 * M_TO_L; // space / 2
-double beamArcLength = 0.03 * M_TO_L;
-double beamAngle = 150.0 * CH_C_PI / 180.0;
-double beamRadius = beamArcLength / beamAngle;
-double flapLength = 0.05 * M_TO_L;
-double flapHeight = 0.04 * M_TO_L; // beamRadius * sin(beamAngle / 2) * 2
+double beamHeight = 0.015 * M_TO_L;
 
 double freq = 2.0; // Swing frequency
 double ts = 0.0 * S_TO_T; // Wait for fluid to settle
-double amplitude = 0.0 * M_TO_L;
+double amplitude = 0.03 * M_TO_L;
 
 double wallOffset = 0.05 * M_TO_L;
 double zOffset = 0.0 * M_TO_L;
@@ -75,23 +71,24 @@ public:
 	virtual double Get_y(double x) const override {
 		if (x < ts) return 0;
 
-		return amplitude * sin((x - ts) * freq * 2 * CH_C_PI - CH_C_PI / 2) + amplitude;
+		return amplitude * sin((x - ts) * freq * 2 * CH_C_PI);
+		//return amplitude * sin((x - ts) * freq * 2 * CH_C_PI - CH_C_PI / 2) + amplitude;
 	}
 };
 
 // Connectivity of beam mesh, only need to calculate once
 void calcBeamCon(
 	std::ostringstream& meshConBuffer,
-	std::shared_ptr<fea::ChMesh> fin
+	std::shared_ptr<fea::ChMesh> body
 ) {
 	char dataBuffer[256];
-	int numEs = fin->GetNelements(); // Number of elements
+	int numEs = body->GetNelements(); // Number of elements
 
 	// Connectivity
 	snprintf(dataBuffer, sizeof(char) * 256, "\nCELLS %d %d\n", numEs, numEs * 5); // 4 indices + 1 count = 5
 	meshConBuffer << std::string(dataBuffer);
 	for (int i = 0; i < numEs; i++) {
-		auto e = std::dynamic_pointer_cast<ChElementShellANCF>(fin->GetElement(i));
+		auto e = std::dynamic_pointer_cast<ChElementShellANCF>(body->GetElement(i));
 		int nodeAIndex = e->GetNodeN(0)->GetIndex() - 1;
 		int nodeBIndex = e->GetNodeN(1)->GetIndex() - 1;
 		int nodeCIndex = e->GetNodeN(2)->GetIndex() - 1;
@@ -111,82 +108,33 @@ void calcBeamCon(
 
 void writeBeamVtk(
 	std::ostringstream& meshConBuffer,
-	std::shared_ptr<fea::ChMesh> fin,
+	std::shared_ptr<fea::ChMesh> body,
 	int frameCurrent
 ) {
 	char dataBuffer[256];
 	std::ostringstream meshBuffer;
 
-	int numNs = fin->GetNnodes(); // Number of nodes
+	int numNs = body->GetNnodes(); // Number of nodes
 
 	// Header
-	snprintf(dataBuffer, sizeof(char) * 256, "# vtk DataFile Version 2.0\nFin\nASCII\nDATASET UNSTRUCTURED_GRID\n");
+	snprintf(dataBuffer, sizeof(char) * 256, "# vtk DataFile Version 2.0\nBody\nASCII\nDATASET UNSTRUCTURED_GRID\n");
 	meshBuffer << std::string(dataBuffer);
 
 	// Position
 	snprintf(dataBuffer, sizeof(char) * 256, "POINTS %d float\n", numNs);
 	meshBuffer << std::string(dataBuffer);
 	for (int i = 0; i < numNs; i++) {
-		auto node = std::dynamic_pointer_cast<ChNodeFEAxyzD>(fin->GetNode(i));
+		auto node = std::dynamic_pointer_cast<ChNodeFEAxyzD>(body->GetNode(i));
 		snprintf(dataBuffer, sizeof(char) * 256, "%f %f %f\n", node->GetPos().x(), node->GetPos().y(), node->GetPos().z());
 		meshBuffer << std::string(dataBuffer);
 	}
 
 	std::ofstream meshFile;
-	snprintf(dataBuffer, sizeof(char) * 256, (out_dir + "/Fin%d.vtk").c_str(), frameCurrent);
+	snprintf(dataBuffer, sizeof(char) * 256, (out_dir + "/Body%d.vtk").c_str(), frameCurrent);
 	meshFile.open(dataBuffer);
 	meshFile << meshBuffer.str();
 	meshFile << meshConBuffer.str();
 	meshFile.close();
-}
-
-void writeFlapVtk(
-	std::shared_ptr<ChBodyEasyBox> flap,
-	double xDim, double yDim, double zDim,
-	int frameCurrent
-) {
-	char dataBuffer[256];
-	std::ostringstream bodyBuffer;
-
-	// Header
-	snprintf(dataBuffer, sizeof(char) * 256, "# vtk DataFile Version 2.0\nFlap\nASCII\nDATASET UNSTRUCTURED_GRID\n");
-	bodyBuffer << std::string(dataBuffer);
-	
-	// Position
-	int numNs = 8;  // 8 nodes for VTK_VOXEL (Type 11)
-	snprintf(dataBuffer, sizeof(char) * 256, "POINTS %d float\n", numNs);
-	bodyBuffer << std::string(dataBuffer);
-
-	std::vector<ChVector<>> nodes;
-	nodes.push_back(ChFrame<>(flap->GetCoord()) * ChVector<>(-xDim / 2, -yDim / 2, -zDim / 2));
-	nodes.push_back(ChFrame<>(flap->GetCoord()) * ChVector<>(xDim / 2, -yDim / 2, -zDim / 2));
-	nodes.push_back(ChFrame<>(flap->GetCoord()) * ChVector<>(-xDim / 2, yDim / 2, -zDim / 2));
-	nodes.push_back(ChFrame<>(flap->GetCoord()) * ChVector<>(xDim / 2, yDim / 2, -zDim / 2));
-	nodes.push_back(ChFrame<>(flap->GetCoord()) * ChVector<>(-xDim / 2, -yDim / 2, zDim / 2));
-	nodes.push_back(ChFrame<>(flap->GetCoord()) * ChVector<>(xDim / 2, -yDim / 2, zDim / 2));
-	nodes.push_back(ChFrame<>(flap->GetCoord()) * ChVector<>(-xDim / 2, yDim / 2, zDim / 2));
-	nodes.push_back(ChFrame<>(flap->GetCoord()) * ChVector<>(xDim / 2, yDim / 2, zDim / 2));
-
-	for (int i = 0; i < numNs; i++) {
-		snprintf(dataBuffer, sizeof(char) * 256, "%f %f %f\n", nodes[i].x(), nodes[i].y(), nodes[i].z());
-		bodyBuffer << std::string(dataBuffer);
-	}
-
-	snprintf(dataBuffer, sizeof(char) * 256, "\nCELLS %d %d\n", 1, 9);
-	bodyBuffer << std::string(dataBuffer);
-	snprintf(dataBuffer, sizeof(char) * 256, "%d %d %d %d %d %d %d %d %d\n", 8, 0, 1, 2, 3, 4, 5, 6, 7);
-	bodyBuffer << std::string(dataBuffer);
-
-	snprintf(dataBuffer, sizeof(char) * 256, "\nCELL_TYPES %d\n", 1); 
-	bodyBuffer << std::string(dataBuffer);
-	snprintf(dataBuffer, sizeof(char) * 256, "%d\n", 11);
-	bodyBuffer << std::string(dataBuffer);
-
-	std::ofstream bodyFile;
-	snprintf(dataBuffer, sizeof(char) * 256, (out_dir + "/Flap%d.vtk").c_str(), frameCurrent);
-	bodyFile.open(dataBuffer);
-	bodyFile << bodyBuffer.str();
-	bodyFile.close();
 }
 
 void writeForce(
@@ -246,22 +194,9 @@ int main(int argc, char* argv[]) {
 	fsi::utils::FinalizeDomain(paramsH);
 	fsi::utils::PrepareOutputDir(paramsH, out_dir, outs_dir, inputJson);
 
-	double flapThickness = beamRadius - beamRadius * cos(beamAngle / 2);
-	double beamDx = -(beamLength + flapLength) / 2;
-	double beamDy = -amplitude - beamRadius + flapThickness / 2;
-	double beamDAngle = 0.0;
-	double beamDz = zOffset; // Offset  midpoint of arc to center of container
-
-	// Vector of beam axis  
-	ChVector<> beamA1(beamDx, beamDy, beamDz); // One end point of beam axis
-	ChVector<> beamA2(beamDx + beamLength, beamDy, beamDz); // The other end point of beam axis
-	ChVector<> beamA = beamA2 - beamA1;
-	beamA.Normalize(); // Unit vector along the beam axis direction
-
-	// Flap dimension and position
-	//printf("\n%f, %f, %f\n", flapLength, flapThickness, flapHeight);
-	ChVector<> sizeHalfFlap(flapLength / 2, flapThickness / 2, flapHeight / 2);
-	ChVector<> posFlap(beamLength / 2, beamDy + beamRadius - flapThickness / 2, beamDz);
+	// Body dimension
+	ChVector<> sizeHalfBody(beamLength / 2, beamThickness / 2, beamHeight / 2);
+	ChVector<> posBody(0.0, 0.0, zOffset); // Center of body
 
 	// Create Fluid region and discretize with SPH particles
 	ChVector<> boxCenter(0.0, 0.0, 0.0);
@@ -280,32 +215,14 @@ int main(int argc, char* argv[]) {
 
 		// Skip if too close to body
 		double gap = space * 1;
-		// Beam
 		bool noContact = true;
-		ChVector<> pt = points[i] - beamA1;
-		Real dot = pt ^ beamA; // Project length along beam axis
-		Real cross = (pt % beamA).Length(); // Distance to beam beam axis
-		double angle = atan2(pt.y(), pt.z());
 		if (
-			dot <= beamLength + gap && // Length
-			dot >= 0 - gap &&
-			cross <= beamRadius + gap && // Ring
-			cross >= beamRadius - gap &&
-			angle >= (CH_C_PI - beamAngle) / 2 + beamDAngle - gap / beamRadius && // Arc
-			angle <= (CH_C_PI + beamAngle) / 2 + beamDAngle + gap / beamRadius
-			) {
-			//printf("\n%f, %f, %f\n", pt.x(), pt.y(), pt.z());
-			//printf("\n%f, %f\n", dot, cross);
-			noContact = false;
-		}
-		// Flap
-		if (
-			points[i].x() <= posFlap.x() + sizeHalfFlap.x() + gap && // Length
-			points[i].x() >= posFlap.x() - sizeHalfFlap.x() - gap &&
-			points[i].y() <= posFlap.y() + sizeHalfFlap.y() + gap && // Thickness
-			points[i].y() >= posFlap.y() - sizeHalfFlap.y() - gap &&
-			points[i].z() <= posFlap.z() + sizeHalfFlap.z() + gap && // Height
-			points[i].z() >= posFlap.z() - sizeHalfFlap.z() - gap
+			points[i].x() <= posBody.x() + sizeHalfBody.x() + gap && // Length
+			points[i].x() >= posBody.x() - sizeHalfBody.x() - gap &&
+			points[i].y() <= posBody.y() + sizeHalfBody.y() + gap && // Thickness
+			points[i].y() >= posBody.y() - sizeHalfBody.y() - gap &&
+			points[i].z() <= posBody.z() + sizeHalfBody.z() + gap && // Height
+			points[i].z() >= posBody.z() - sizeHalfBody.z() - gap
 			) {
 			noContact = false;
 		}
@@ -367,21 +284,12 @@ int main(int argc, char* argv[]) {
 	motor->SetMotionFunction(motor_pos);
 	mphysicalSystem.AddLink(motor);
 
-	// Flap
-	auto flap = chrono_types::make_shared<ChBodyEasyBox>(sizeHalfFlap.x() * 2, sizeHalfFlap.y() * 2, sizeHalfFlap.z() * 2, rhoSolid);
-	flap->SetPos(posFlap);
-	mphysicalSystem.AddBody(flap);
+	// Body, curved to positive y
+	auto body = chrono_types::make_shared<fea::ChMesh>();
 
-	myFsiSystem.AddFsiBody(flap); // Add to fsi system for interaction other than boundary
-	fsi::utils::AddBoxBce(myFsiSystem.GetDataManager(), paramsH, flap, chrono::VNULL, chrono::QUNIT, sizeHalfFlap, 13, true); // Set solid
-	fsi::utils::AddBoxBce(myFsiSystem.GetDataManager(), paramsH, flap, chrono::VNULL, chrono::QUNIT, sizeHalfFlap, -13, true, true); // Set solid
-
-	// Fin, curved to positive y
-	auto fin = chrono_types::make_shared<fea::ChMesh>();
-
-	int numDivX = 10;
+	int numDivX = 50;
 	int numDivY = 0;
-	int numDivZ = 10;
+	int numDivZ = 5;
 	int numNodeX = numDivX + 1;
 	int numNodeY = numDivY + 1;
 	int numNodeZ = numDivZ + 1;
@@ -389,25 +297,22 @@ int main(int argc, char* argv[]) {
 	int numNodes = numNodeX * numNodeY * numNodeZ;
 
 	double dx = beamLength / numDivX;
-	double dy = beamThickness;
-	double dz = beamAngle / numDivZ; // rad
-	double dzLength = beamRadius * sin(dz / 2) * 2;
+	double dy = numDivY == 0 ? beamThickness: beamThickness/ numDivY;
+	double dz = beamHeight / numDivZ;
 
 	// Add nodes to mesh
 	for (int k = 0; k < numNodeZ; k++) { // Loop order MATTERS!!
 		for (int j = 0; j < numNodeY; j++) {
 			for (int i = 0; i < numNodeX; i++) {
 				// Location
-				double x = i * dx + beamDx;
-				double r = j * dy + beamRadius;
-				double theta = k * dz + (CH_C_PI - beamAngle) / 2 + beamDAngle;
-				double y = r * sin(theta) + beamDy;
-				double z = r * cos(theta) + beamDz;
+				double x = i * dx - beamLength / 2;
+				double y = j * dy + posBody.y();
+				double z = k * dz - beamHeight / 2 + posBody.z();
 
 				// Direction
 				double dirX = 0;
-				double dirY = sin(theta);
-				double dirZ = cos(theta);
+				double dirY = 1;
+				double dirZ = 0;
 				//printf("\n%f, %f, %f, %f\n", x, y, z, theta);
 
 				// Node
@@ -416,18 +321,12 @@ int main(int argc, char* argv[]) {
 
 				// Constraint one end
 				if (i == 0) {
-					auto finJoint = chrono_types::make_shared<ChLinkPointFrameGeneric>(true, true, true);
-					finJoint->Initialize(node, slider);
-					mphysicalSystem.Add(finJoint);
+					auto bodyJoint = chrono_types::make_shared<ChLinkPointFrameGeneric>(true, true, true);
+					bodyJoint->Initialize(node, slider);
+					mphysicalSystem.Add(bodyJoint);
 				}
 
-				if (i == numNodeX - 1) {
-					auto flapJoint = chrono_types::make_shared<ChLinkPointFrameGeneric>(true, true, true);
-					flapJoint->Initialize(node, flap);
-					mphysicalSystem.Add(flapJoint);
-				}
-
-				fin->AddNode(node);
+				body->AddNode(node);
 			}
 		}
 	}
@@ -454,17 +353,17 @@ int main(int argc, char* argv[]) {
 				// Element
 				auto element = chrono_types::make_shared<ChElementShellANCF>();
 				element->SetNodes(
-					std::dynamic_pointer_cast<ChNodeFEAxyzD>(fin->GetNode(nodeAIndex)),
-					std::dynamic_pointer_cast<ChNodeFEAxyzD>(fin->GetNode(nodeBIndex)),
-					std::dynamic_pointer_cast<ChNodeFEAxyzD>(fin->GetNode(nodeCIndex)),
-					std::dynamic_pointer_cast<ChNodeFEAxyzD>(fin->GetNode(nodeDIndex))
+					std::dynamic_pointer_cast<ChNodeFEAxyzD>(body->GetNode(nodeAIndex)),
+					std::dynamic_pointer_cast<ChNodeFEAxyzD>(body->GetNode(nodeBIndex)),
+					std::dynamic_pointer_cast<ChNodeFEAxyzD>(body->GetNode(nodeCIndex)),
+					std::dynamic_pointer_cast<ChNodeFEAxyzD>(body->GetNode(nodeDIndex))
 				);
-				element->SetDimensions(dx, dzLength);
+				element->SetDimensions(dx, dz);
 				element->AddLayer(dy, 0 * CH_C_DEG_TO_RAD, shellMat);
 				element->SetAlphaDamp(0.01);
 				element->SetGravityOn(false);
 
-				fin->AddElement(element);
+				body->AddElement(element);
 
 				elementsNodes[elementCount].push_back(nodeAIndex);
 				elementsNodes[elementCount].push_back(nodeBIndex);
@@ -479,17 +378,17 @@ int main(int argc, char* argv[]) {
 			}
 		}
 	}
-	mphysicalSystem.Add(fin);
+	mphysicalSystem.Add(body);
 
 	std::vector<std::vector<int>> elementsNodes1D;
 	fsi::utils::AddBCE_FromMesh(
-		myFsiSystem.GetDataManager(), paramsH, fin,
+		myFsiSystem.GetDataManager(), paramsH, body,
 		myFsiSystem.GetFsiNodes(), myFsiSystem.GetFsiCables(), myFsiSystem.GetFsiShells(),
 		nodeNeighborElement, elementsNodes1D, elementsNodes,
 		false, true, false, true, 0, 0
 	);
 	myFsiSystem.SetShellElementsNodes(elementsNodes);
-	myFsiSystem.SetFsiMesh(fin);
+	myFsiSystem.SetFsiMesh(body);
 
 	// Construction of the FSI system must be finalized before running
 	myFsiSystem.Finalize();
@@ -505,7 +404,7 @@ int main(int argc, char* argv[]) {
 	mystepper->SetStepControl(false);
 
 	std::ostringstream meshConBuffer;
-	calcBeamCon(meshConBuffer, fin);
+	calcBeamCon(meshConBuffer, body);
 	//return 0;
 
 	// Start the simulation
@@ -527,8 +426,7 @@ int main(int argc, char* argv[]) {
 				out_dir, true
 			);
 
-			writeBeamVtk(meshConBuffer, fin, frameCurrent);
-			writeFlapVtk(flap, flapLength, flapThickness, flapHeight, frameCurrent);
+			writeBeamVtk(meshConBuffer, body, frameCurrent);
 			writeForce(motor, frameCurrent);
 		}
 
