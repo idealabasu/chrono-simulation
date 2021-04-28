@@ -36,9 +36,9 @@ double KG_TO_W = 1e3; // 1 gram
 double S_TO_T = 1e0; // 1s
 
 // Fluid domain dimension
-Real fxDim = 0.20 * M_TO_L;
-Real fyDim = 0.10 * M_TO_L;
-Real fzDim = 0.07 * M_TO_L;
+Real fxDim = 0.19 * M_TO_L;
+Real fyDim = 0.04 * M_TO_L;
+Real fzDim = 0.055 * M_TO_L;
 
 // Simulation domain dimension
 Real bxDim = fxDim;
@@ -57,7 +57,7 @@ double beamHeight = 0.015 * M_TO_L;
 
 double freq = 2.0; // Swing frequency
 double ts = 0.0 * S_TO_T; // Wait for fluid to settle
-double amplitude = 0.03 * M_TO_L;
+double amplitude = 0.0 * M_TO_L;
 
 double wallOffset = 0.05 * M_TO_L;
 double zOffset = 0.0 * M_TO_L;
@@ -230,12 +230,10 @@ int main(int argc, char* argv[]) {
 		if (noContact) {
 			myFsiSystem.GetDataManager()->AddSphMarker(
 				fsi::mR4(points[i].x(), points[i].y(), points[i].z(), paramsH->HSML), // x, y, z, radius
-				fsi::mR3(1e-10), // Velocity
+				fsi::mR3(0), // Velocity
 				fsi::mR4(rho_ini, pre_ini, paramsH->mu0, -1)); // density, pressure, viscosity		
 			numPartAdded++;
 		}
-
-
 	}
 
 	// Initialize phases
