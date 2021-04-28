@@ -2,10 +2,8 @@
 
   "Output Folder": "FSI_FIN_I2SPH",
 
-  // dm, g
-
   "Physical Properties of Fluid": {
-    "Density": 1, // 1000 kg/m^3
+    "Density": 1.0, // 1000 kg/m^3
     "Viscosity": 0.01, // 0.001 kg/m/s
     "Body Force": [ 0.0, 0.0, 0.0 ],
     "Gravity": [ 0.0, 0.0, -981.0 ], // 9.81 m/s^2
@@ -27,7 +25,7 @@
 
   "Time Stepping": {
     "Adaptive Time stepping": false,
-    "Beta": 0.0,
+    "Beta": 1.0, // Seems to relate to acceleration update and 1.0 makes equilibrium force correct. 
     "CFL number": 0.5,
     "Fluid time step": 5e-4,
     "Solid time step": 1e-4,

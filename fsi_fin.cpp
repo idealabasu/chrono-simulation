@@ -61,7 +61,7 @@ double flapHeight = 0.04 * M_TO_L; // beamRadius * sin(beamAngle / 2) * 2
 
 double freq = 2.0; // Swing frequency
 double ts = 0.0 * S_TO_T; // Wait for fluid to settle
-double amplitude = 0.05 * M_TO_L;
+double amplitude = 0.0 * M_TO_L;
 
 double wallOffset = 0.05 * M_TO_L;
 double zOffset = 0.0 * M_TO_L;
@@ -223,7 +223,7 @@ int main(int argc, char* argv[]) {
 	fsi::ChSystemFsi myFsiSystem(mphysicalSystem);
 
 	std::shared_ptr<fsi::SimParams> paramsH = myFsiSystem.GetSimParams();
-	std::string inputJson = "fsi_fin.json";
+	std::string inputJson = "../../chrono-simulation/fsi_fin.json"; // loado input from source folder
 
 	if (!fsi::utils::ParseJSON(inputJson, paramsH, fsi::mR3(bxDim, byDim, bzDim))) {
 		printf("Invalid json\n");
@@ -246,7 +246,6 @@ int main(int argc, char* argv[]) {
 	fsi::utils::FinalizeDomain(paramsH);
 	fsi::utils::PrepareOutputDir(paramsH, out_dir, outs_dir, inputJson);
 
-	//double beamAngle = beamArcLength / beamRadius;
 	double flapThickness = beamRadius - beamRadius * cos(beamAngle / 2);
 	double beamDx = -(beamLength + flapLength) / 2;
 	double beamDy = -amplitude - beamRadius + flapThickness / 2;
@@ -343,7 +342,7 @@ int main(int argc, char* argv[]) {
 	// Wall should be 1 space away from the boundary particles
 	ChVector<> sizeHalfContainer(fxDim / 2 + space * 3, fyDim / 2 + space * 3, fzDim / 2 + space * 3 + wallOffset / 2);
 	ChVector<> posContainer(0, 0, wallOffset / 2);
-	auto container = chrono_types::make_shared<ChBodyEasyBox>(sizeHalfContainer.x() * 2, sizeHalfContainer.y() * 2, sizeHalfContainer.z() * 2, rhoSolid);
+	auto container = chrono_types::make_shared<ChBodyEasyBox>(sizeHalfContainer.x() * 2, sizeHalfContainer.y() * 2, sizeHalfContainer.z() * 2, 0.0 * rhoSolid);
 	container->SetPos(posContainer);
 	container->SetBodyFixed(true);
 	mphysicalSystem.AddBody(container);
@@ -357,7 +356,7 @@ int main(int argc, char* argv[]) {
 	fsi::utils::AddBoxBce(myFsiSystem.GetDataManager(), paramsH, container, chrono::VNULL, chrono::QUNIT, sizeHalfContainer, -13, false, true);
 
 	// Slider
-	auto slider = chrono_types::make_shared<ChBodyEasyBox>(0.0 * M_TO_L, 0.0 * M_TO_L, 0.0 * M_TO_L, rhoSolid);
+	auto slider = chrono_types::make_shared<ChBodyEasyBox>(0.0 * M_TO_L, 0.0 * M_TO_L, 0.0 * M_TO_L, 0.0 * rhoSolid);
 	slider->SetPos(ChVector<>(0, 0, 0));
 	mphysicalSystem.AddBody(slider);
 
@@ -372,8 +371,8 @@ int main(int argc, char* argv[]) {
 	auto flap = chrono_types::make_shared<ChBodyEasyBox>(sizeHalfFlap.x() * 2, sizeHalfFlap.y() * 2, sizeHalfFlap.z() * 2, rhoSolid);
 	flap->SetPos(posFlap);
 	mphysicalSystem.AddBody(flap);
-	myFsiSystem.AddFsiBody(flap); // Add to fsi system for interaction other than boundary
 
+	myFsiSystem.AddFsiBody(flap); // Add to fsi system for interaction other than boundary
 	fsi::utils::AddBoxBce(myFsiSystem.GetDataManager(), paramsH, flap, chrono::VNULL, chrono::QUNIT, sizeHalfFlap, 13, true); // Set solid
 	fsi::utils::AddBoxBce(myFsiSystem.GetDataManager(), paramsH, flap, chrono::VNULL, chrono::QUNIT, sizeHalfFlap, -13, true, true); // Set solid
 
@@ -394,8 +393,6 @@ int main(int argc, char* argv[]) {
 	double dz = beamAngle / numDivZ; // rad
 	double dzLength = beamRadius * sin(dz / 2) * 2;
 
-	std::vector<std::shared_ptr<fea::ChLinkPointFrameGeneric>> sliderFinJoints;
-
 	// Add nodes to mesh
 	for (int k = 0; k < numNodeZ; k++) { // Loop order MATTERS!!
 		for (int j = 0; j < numNodeY; j++) {
@@ -415,14 +412,13 @@ int main(int argc, char* argv[]) {
 
 				// Node
 				auto node = chrono_types::make_shared<ChNodeFEAxyzD>(ChVector<>(x, y, z), ChVector<>(dirX, dirY, dirZ));
-				node->SetMass(0);
+				node->SetMass(0.0);
 
 				// Constraint one end
 				if (i == 0) {
 					auto finJoint = chrono_types::make_shared<ChLinkPointFrameGeneric>(true, true, true);
 					finJoint->Initialize(node, slider);
 					mphysicalSystem.Add(finJoint);
-					sliderFinJoints.push_back(finJoint);
 				}
 
 				if (i == numNodeX - 1) {
@@ -537,7 +533,6 @@ int main(int argc, char* argv[]) {
 		}
 
 		printf("\nstep: %f, time: %f, current frame: %d\n", paramsH->dT, time, frameCurrent);
-		//printf("\n%f, %f, %f\n", slider->GetPos().x(), slider->GetPos().y(), slider->GetPos().z());
 
 		// Call the FSI solver
 		try {
