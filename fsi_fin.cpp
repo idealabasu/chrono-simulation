@@ -37,7 +37,7 @@ double S_TO_T = 1e0; // 1s
 
 // Fluid domain dimension
 Real fxDim = 0.11 * M_TO_L;
-Real fyDim = 0.15 * M_TO_L;
+Real fyDim = 0.30 * M_TO_L;
 Real fzDim = 0.08 * M_TO_L;
 
 // Simulation domain dimension
@@ -52,16 +52,16 @@ double rhoSolid = 1500 * KG_TO_W / M_TO_L /  M_TO_L / M_TO_L;
 
 // Solid Dimension
 double beamLength = 0.03 * M_TO_L;
-double beamThickness = 0.0005 * M_TO_L; // space / 2
+double beamThickness = 0.0003 * M_TO_L; // space / 2
 double beamArcLength = 0.03 * M_TO_L;
 double beamAngle = 150.0 * CH_C_PI / 180.0;
 double beamRadius = beamArcLength / beamAngle;
-double flapLength = 0.05 * M_TO_L;
+double flapLength = 0.04 * M_TO_L;
 double flapHeight = 0.04 * M_TO_L; // beamRadius * sin(beamAngle / 2) * 2
 
-double freq = 2.0; // Swing frequency
+double freq = 4.0; // Swing frequency
 double ts = 0.0 * S_TO_T; // Wait for fluid to settle
-double amplitude = 0.0 * M_TO_L;
+double amplitude = 0.05 * M_TO_L;
 
 double wallOffset = 0.05 * M_TO_L;
 double zOffset = 0.0 * M_TO_L;
@@ -415,7 +415,7 @@ int main(int argc, char* argv[]) {
 				node->SetMass(0.0);
 
 				// Constraint one end
-				if (i == 0) {
+				if (i <= 1) {
 					auto finJoint = chrono_types::make_shared<ChLinkPointFrameGeneric>(true, true, true);
 					finJoint->Initialize(node, slider);
 					mphysicalSystem.Add(finJoint);
