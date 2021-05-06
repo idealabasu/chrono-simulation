@@ -1,0 +1,50 @@
+{
+  "Output Folder": "FSI_BODY_I2SPH",
+
+  "Physical Properties of Fluid": {
+    "Density": 1.0, // 1000 kg/m^3
+    "Viscosity": 0.01, // 0.001 kg/m/s
+    "Body Force": [ 0.0, 0.0, 0.0 ],
+    "Gravity": [ 0.0, 0.0, -981.0 ], // 9.81 m/s^2
+    "Surface Tension Kappa": 0.0,
+    "Characteristic Length": 10.0 // 0.1m
+  },
+
+  "SPH Parameters": {
+    "Method": "I2SPH", //WCSPH, IISPH, I2SPHH
+    "Kernel h": 0.25, // 2.5mm
+    "Initial Spacing": 0.25, // 2.5mm
+    "Epsilon": 0.001, // 0.01mm, minimum particle distance
+    "Maximum Velocity": 100.0, // 1m/s
+    "XSPH Coefficient": 0.5,
+    "Shifting Coefficient": 0.0,
+    "Conservative Discretization": true
+
+  },
+
+  "Time Stepping": {
+    "Adaptive Time stepping": false,
+    "Beta": 1.0, // Seems to relate to acceleration update and 1.0 makes equilibrium force correct. 
+    "CFL number": 0.5,
+    "Fluid time step": 5e-4,
+    "Solid time step": 1e-4,
+    "Maximum time step": 5e-4,
+    "End time": 3.0,
+    "Write frame per second": 200
+  },
+
+  "Pressure Equation": {
+    "Boundary Conditions": "Generalized Wall BC",
+    "Linear solver": "Jacobi",
+    "Poisson source term": "Density-Based",
+    "Projection method": "Non-Incremental",
+    "Under-relaxation": 0.01, // Decrease to converge
+    "Clamp Pressure": false, // Causes pressure oscillation
+    "Absolute residual": 1e-6,
+    "Relative residual": 1e-6,
+    "Maximum Iterations": 500,
+    "Verbose monitoring": false,
+    "Constraint Pressure": false,
+    "Average Pressure": 0.0
+  }
+}
