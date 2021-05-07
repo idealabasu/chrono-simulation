@@ -40,7 +40,7 @@ double ts = 0.5;
 double amplitude = 0.5;
 double freq = 1.0;
 
-double tStep = 0.0005;
+double tStep = 0.001;
 int maxIter = 30;
 double tol = 1e-3;
 double tFinal = 5.0 + ts;
