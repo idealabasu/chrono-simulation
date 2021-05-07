@@ -1,14 +1,18 @@
 #include "chrono/physics/ChLoadBodyMesh.h"
 #include "chrono/physics/ChLoadContainer.h"
 #include "chrono/physics/ChSystemNSC.h"
+#include "chrono/physics/ChBodyEasy.h"
+#include "chrono/physics/ChLinkMotorLinearPosition.h"
 
 #include "chrono/fea/ChElementShellANCF.h"
+#include "chrono/fea/ChLinkPointFrame.h"
 #include "chrono/fea/ChLoadContactSurfaceMesh.h"
 #include "chrono/fea/ChMesh.h"
 #include "chrono/fea/ChVisualizationFEAmesh.h"
 #include "chrono_irrlicht/ChIrrApp.h"
 
 #include "chrono_multicore/physics/ChSystemMulticore.h"
+#include "chrono/utils/ChUtilsCreators.h"
 #include "chrono/utils/ChUtilsGenerators.h"
 #include "chrono_pardisomkl/ChSolverPardisoMKL.h"
 
@@ -18,26 +22,45 @@ using namespace chrono::collision;
 using namespace irr;
 using namespace chrono::irrlicht; 
 
+double tankLength = 1.0;
+double tankHeight = 0.5;
+double tankWidth = 2.0;
+double wallThickness = 0.01;
+double grainR = 0.02;
+
+double finLength = 0.4;
+double finHeight = 0.3;
+double finThickness = 0.02;
+double finHeightOffset = 0.1;
+double rho = 1500;
+double E = 5e8;
+double nu = 0.3;
+
+double ts = 0.5;
+double amplitude = 0.5;
+double freq = 1.0;
+
+double tStep = 0.0005;
+int maxIter = 30;
+double tol = 1e-3;
+double tFinal = 5.0 + ts;
+double fps = 100;
+
+class ChFunction_Motor : public ChFunction {
+public:
+    virtual ChFunction_Motor* Clone() const override {
+        return new ChFunction_Motor();
+    }
+
+    virtual double Get_y(double x) const override {
+        if (x < ts) return 0;
+
+        return amplitude * sin((x - ts) * freq * 2 * CH_C_PI);
+    }
+};
+
 int main(int argc, char* argv[]) {
     SetChronoDataPath(CHRONO_DATA_DIR);
-
-    double tankLength = 1.0;
-    double tankHeight = 0.5;
-    double tankWidth = 2.0;
-    double wallThickness = 0.01;
-    double grainR = 0.02;
-
-    double finLength = 0.4;
-    double finHeight = 0.2;
-    double finThickness = 0.01;
-    double rho = 1500;
-    double E = 5e7;
-    double nu = 0.3;
-
-    double tStep = 0.001;
-    int maxIter = 30;
-    double tol = 1e-3;
-    double tFinal = 5.0;
 
     // FEA system
     ChSystemNSC systemF;
@@ -48,9 +71,26 @@ int main(int argc, char* argv[]) {
     surfMat->SetFriction(0.3);
     surfMat->SetRestitution(0.0);
 
+    // Floor, slider, motor
+    auto ground = chrono_types::make_shared<ChBodyEasyBox>(0.0, 0.0, 0.0, 0.0);
+    ground->SetPos(ChVector<>(0, 0, 0));
+    ground->SetBodyFixed(true);
+    systemF.AddBody(ground);
+
+    auto slider = chrono_types::make_shared<ChBodyEasyBox>(0.0, 0.0, 0.0, 0.0);
+    slider->SetPos(ChVector<>(0, 0, 0));
+    systemF.AddBody(slider);
+
+    auto motor = chrono_types::make_shared<ChLinkMotorLinearPosition>();
+    motor->Initialize(slider, ground, ChFrame<>(ChVector<>(0, 0, 0), Q_from_AngY(-CH_C_PI / 2))); // rotate to y directon
+    auto motor_pos = chrono_types::make_shared<ChFunction_Motor>();
+    motor->SetMotionFunction(motor_pos);
+    systemF.AddLink(motor);
+
+    // Fin mesh
     auto fin = chrono_types::make_shared<fea::ChMesh>();
 
-    int numDivX = 5;
+    int numDivX = 10;
     int numDivY = 5;
     int numDivZ = 0;
     int numNodeX = numDivX + 1;
@@ -68,7 +108,7 @@ int main(int argc, char* argv[]) {
         for (int i = 0; i < numNodeX; i++) {
             // Location
             double x = i * dx - finLength / 2;
-            double y = j * dy;
+            double y = j * dy + finHeightOffset;
             double z = 0;
 
             // Direction
@@ -82,8 +122,11 @@ int main(int argc, char* argv[]) {
             node->SetMass(0.0);
 
             // Constraint one end
-            if (i == 0) {
-                node->SetFixed(true);
+            if (i <= 1) {
+                //node->SetFixed(true);
+                auto finJoint = chrono_types::make_shared<ChLinkPointFrameGeneric>(true, true, true);
+                finJoint->Initialize(node, slider);
+                systemF.Add(finJoint);
             }
 
             fin->AddNode(node);
@@ -242,22 +285,26 @@ int main(int argc, char* argv[]) {
     m1->setDefaultSize(ChVector<>(grainR, grainR, grainR));
 
     generator.setBodyIdentifier(bodyId);
-    ChVector<> hdims(tankLength / 2 - grainR *1.01, tankHeight / 4, tankWidth / 4 - grainR * 1.01); // Leave a gap from side walls, half filled container
-    ChVector<> center(0, tankHeight + tankHeight / 2, tankWidth / 4);
+    ChVector<> hdims(tankLength / 2 - grainR *1.01, tankHeight / 2, tankWidth / 2 - grainR * 1.01); // Leave a gap from side walls, half filled container
+    ChVector<> center(0, finHeight + finHeightOffset + hdims.y(), 0);
     generator.CreateObjectsBox(sampler, center, hdims);
 
     //return 0;
 
     ChSystem* sys = &systemG; // System to visualize
-    ChIrrApp application(sys, L"Cosim", core::dimension2d<u32>(1280, 720));
+    ChIrrApp application(sys, L"Cosim", core::dimension2d<u32>(960, 720));
     application.AddTypicalSky();
     application.AddTypicalLights();
-    application.AddTypicalCamera(core::vector3dfCH(ChVector<>(tankLength / 1.5, tankHeight * 3, tankWidth / 1.5)), core::vector3dfCH(ChVector<>(0, 0, 0)));
+    application.AddTypicalCamera(core::vector3dfCH(ChVector<>(tankLength / 1.5, tankHeight * 4.0, tankWidth / 5.0)), core::vector3dfCH(ChVector<>(0, 0, 0)));
     application.AddShadowAll();
     application.AssetBindAll();
     application.AssetUpdateAll();
 
     application.SetTimestep(tStep);
+
+    // Take screenshots
+    application.SetVideoframeSave(true);
+    application.SetVideoframeSaveInterval(1/fps/tStep);
 
     while (application.GetDevice()->run()) {
         printf("time: %f\n", sys->GetChTime());
@@ -265,9 +312,10 @@ int main(int argc, char* argv[]) {
         application.BeginScene();
         application.DrawAll();
 
-        tools::drawSegment(application.GetVideoDriver(), ChVector<>(0, 0, 0), ChVector<>(1, 0, 0), irr::video::SColor(255, 255, 0, 0));
-        tools::drawSegment(application.GetVideoDriver(), ChVector<>(0, 0, 0), ChVector<>(0, 1, 0), irr::video::SColor(255, 0, 255, 0));
-        tools::drawSegment(application.GetVideoDriver(), ChVector<>(0, 0, 0), ChVector<>(0, 0, 1), irr::video::SColor(255, 0, 0, 255));
+        // Draw xyz axis from origin
+        //tools::drawSegment(application.GetVideoDriver(), ChVector<>(0, 0, 0), ChVector<>(1, 0, 0), irr::video::SColor(255, 255, 0, 0));
+        //tools::drawSegment(application.GetVideoDriver(), ChVector<>(0, 0, 0), ChVector<>(0, 1, 0), irr::video::SColor(255, 0, 255, 0));
+        //tools::drawSegment(application.GetVideoDriver(), ChVector<>(0, 0, 0), ChVector<>(0, 0, 1), irr::video::SColor(255, 0, 0, 255));
         
         application.DoStep();
         application.EndScene();
@@ -293,6 +341,7 @@ int main(int argc, char* argv[]) {
         meshLoad->InputSimpleForces(vertForce, vertIndex);
 
         systemF.DoStepDynamics(tStep);
+        //printf("%f, %f, %f\n", slider->GetPos().x(), slider->GetPos().y(), slider->GetPos().z());
 
         vertPos.clear();
         vertVel.clear();
@@ -354,7 +403,7 @@ int main(int argc, char* argv[]) {
             );
         }
 
-        //if (sys->GetChTime() > tFinal) break;
+        if (sys->GetChTime() > tFinal) break;
     }
 
     return 0;
