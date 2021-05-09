@@ -61,7 +61,7 @@ project(chrono_simulation)
 
 LIST(APPEND CMAKE_PREFIX_PATH "${CMAKE_INSTALL_PREFIX}/../Chrono/lib")
 find_package(Chrono
-             COMPONENTS FSI pardisomkl
+             COMPONENTS FSI pardisomkl multicore Irrlicht
              CONFIG)
 
 #--------------------------------------------------------------
@@ -127,6 +127,7 @@ endif()
 
 add_executable(fsi_fin fsi_fin.cpp)
 add_executable(fsi_body fsi_body.cpp)
+add_executable(cosim_fin cosim_fin.cpp)
 
 #--------------------------------------------------------------
 # Set properties for your executable target
@@ -145,6 +146,10 @@ set_target_properties(fsi_body PROPERTIES
 	    COMPILE_FLAGS "${CHRONO_CXX_FLAGS} ${EXTRA_COMPILE_FLAGS}"
 	    COMPILE_DEFINITIONS "CHRONO_DATA_DIR=\"${CHRONO_DATA_DIR}\""
 	    LINK_FLAGS "${CHRONO_LINKER_FLAGS}")
+set_target_properties(cosim_fin PROPERTIES 
+	    COMPILE_FLAGS "${CHRONO_CXX_FLAGS} ${EXTRA_COMPILE_FLAGS}"
+	    COMPILE_DEFINITIONS "CHRONO_DATA_DIR=\"${CHRONO_DATA_DIR}\""
+	    LINK_FLAGS "${CHRONO_LINKER_FLAGS}")
 		
 #--------------------------------------------------------------
 # Link to Chrono libraries and dependency libraries
@@ -152,6 +157,7 @@ set_target_properties(fsi_body PROPERTIES
 
 target_link_libraries(fsi_fin ${CHRONO_LIBRARIES})
 target_link_libraries(fsi_body ${CHRONO_LIBRARIES})
+target_link_libraries(cosim_fin ${CHRONO_LIBRARIES})
 
 #--------------------------------------------------------------
 # === 4 (OPTIONAL) ===
