@@ -4,7 +4,7 @@
 
 #include "chrono/physics/ChSystemSMC.h"
 #include "chrono/physics/ChBodyEasy.h"
-#include "chrono/physics/ChLinkMotorLinearPosition.h"
+#include "chrono/physics/ChLinkMotorRotationSpeed.h"
 
 #include "chrono/fea/ChElementShellANCF.h"
 #include "chrono/fea/ChLinkPointFrame.h"
@@ -31,14 +31,14 @@ const std::string outs_dir = "FSI_BODY/"; // Directory for outputs
 std::string out_dir; // Directory for this simulation
 
 // Parameters
-double M_TO_L = 1e2; // cm
-double KG_TO_W = 1e3; // 1 gram
+double M_TO_L = 1e0; // cm
+double KG_TO_W = 1e0; // 1 gram
 double S_TO_T = 1e0; // 1s
 
 // Fluid domain dimension
-Real fxDim = 0.20 * M_TO_L;
-Real fyDim = 0.11 * M_TO_L;
-Real fzDim = 0.05 * M_TO_L;
+Real fxDim = 0.8 * M_TO_L;
+Real fyDim = 0.3 * M_TO_L;
+Real fzDim = 0.3 * M_TO_L;
 
 // Simulation domain dimension
 Real bxDim = fxDim;
@@ -46,20 +46,21 @@ Real byDim = fyDim;
 Real bzDim = fzDim;
 
 // Solid materials
-double E = 2e8 * KG_TO_W / M_TO_L / S_TO_T / S_TO_T; // kg*m/s^2/m^2
-double nu = 0.3;
-double rhoSolid = 1500 * KG_TO_W / M_TO_L /  M_TO_L / M_TO_L;
+double E = 2600e6 * KG_TO_W / M_TO_L / S_TO_T / S_TO_T; // kg*m/s^2/m^2
+double nu = 0.38;
+double rhoSolid = 1220 * KG_TO_W / M_TO_L / M_TO_L / M_TO_L;
+double smallNum = 1e-6;
 
 // Solid Dimension
-double beamLength = 0.15 * M_TO_L;
-double beamThickness = 0.0005 * M_TO_L; // space / 2
-double beamHeight = 0.01 * M_TO_L;
+double beamLength = 0.551 * M_TO_L;
+double beamThickness = 0.003 * M_TO_L; 
+double beamHeight = 0.041 * M_TO_L; // Increase a bit to avoid numerical issue
 
-double freq = 2.0; // Swing frequency
-double ts = 0.0 * S_TO_T; // Wait for fluid to settle
-double amplitude = 0.03 * M_TO_L;
+double freq = 1.0; // Swing frequency
+double ts = 0.5 * S_TO_T; // Wait for fluid to settle
+double amplitude = CH_C_PI / S_TO_T * 0; // rad/s
 
-double wallOffset = 0.05 * M_TO_L;
+double wallOffset = 0.1 * M_TO_L;
 double zOffset = 0.0 * M_TO_L;
 
 class ChFunction_Motor : public ChFunction {
@@ -71,8 +72,15 @@ public:
 	virtual double Get_y(double x) const override {
 		if (x < ts) return 0;
 
-		return amplitude * sin((x - ts) * freq * 2 * CH_C_PI);
-		//return amplitude * sin((x - ts) * freq * 2 * CH_C_PI - CH_C_PI / 2) + amplitude;
+		double period = 1/freq;
+		double t = fmod(x - ts, period);
+		
+		if (t < period / 4 || t > period / 4 * 3) {
+			return amplitude;
+		}
+		else {
+			return -amplitude;
+		}
 	}
 };
 
@@ -138,7 +146,7 @@ void writeBeamVtk(
 }
 
 void writeForce(
-	std::shared_ptr<ChLinkMotorLinearPosition> joint,
+	std::shared_ptr<ChLinkMotorRotationSpeed> joint,
 	int frameCurrent
 ) {
 	char dataBuffer[256];
@@ -230,7 +238,7 @@ int main(int argc, char* argv[]) {
 		if (noContact) {
 			myFsiSystem.GetDataManager()->AddSphMarker(
 				fsi::mR4(points[i].x(), points[i].y(), points[i].z(), paramsH->HSML), // x, y, z, radius
-				fsi::mR3(0), // Velocity
+				fsi::mR3(smallNum), // Velocity
 				fsi::mR4(rho_ini, pre_ini, paramsH->mu0, -1)); // density, pressure, viscosity		
 			numPartAdded++;
 		}
@@ -257,7 +265,7 @@ int main(int argc, char* argv[]) {
 	// Wall should be 1 space away from the boundary particles
 	ChVector<> sizeHalfContainer(fxDim / 2 + space * 3, fyDim / 2 + space * 3, fzDim / 2 + space * 3 + wallOffset / 2);
 	ChVector<> posContainer(0, 0, wallOffset / 2);
-	auto container = chrono_types::make_shared<ChBodyEasyBox>(sizeHalfContainer.x() * 2, sizeHalfContainer.y() * 2, sizeHalfContainer.z() * 2, 0.0 * rhoSolid);
+	auto container = chrono_types::make_shared<ChBodyEasyBox>(sizeHalfContainer.x() * 2, sizeHalfContainer.y() * 2, sizeHalfContainer.z() * 2, smallNum);
 	container->SetPos(posContainer);
 	container->SetBodyFixed(true);
 	mphysicalSystem.AddBody(container);
@@ -271,23 +279,23 @@ int main(int argc, char* argv[]) {
 	fsi::utils::AddBoxBce(myFsiSystem.GetDataManager(), paramsH, container, chrono::VNULL, chrono::QUNIT, sizeHalfContainer, -13, false, true);
 
 	// Slider
-	auto slider = chrono_types::make_shared<ChBodyEasyBox>(0.0 * M_TO_L, 0.0 * M_TO_L, 0.0 * M_TO_L, 0.0 * rhoSolid);
+	auto slider = chrono_types::make_shared<ChBodyEasyBox>(smallNum, smallNum, smallNum, smallNum);
 	slider->SetPos(ChVector<>(0, 0, 0));
 	mphysicalSystem.AddBody(slider);
 
-	auto motor = chrono_types::make_shared<ChLinkMotorLinearPosition>();
-	motor->Initialize(slider, container, ChFrame<>(ChVector<>(0, 0, 0), Q_from_AngZ(CH_C_PI / 2))); // rotate to y directon
-	//auto motor_pos = chrono_types::make_shared<ChFunction_Sine>(0, 0.5, 0);
-	auto motor_pos = chrono_types::make_shared<ChFunction_Motor>();
-	motor->SetMotionFunction(motor_pos);
+	auto motor = chrono_types::make_shared<ChLinkMotorRotationSpeed>();
+	motor->Initialize(slider, container, ChFrame<>(ChVector<>(-beamLength / 2, 0, 0), QUNIT)); // rotate to y directon
+	//auto motor_pos = chrono_types::make_shared<ChFunction_Sine>(0, 1.0, 1);
+	auto motor_vel = chrono_types::make_shared<ChFunction_Motor>();
+	motor->SetSpeedFunction(motor_vel);
 	mphysicalSystem.AddLink(motor);
 
 	// Body, curved to positive y
 	auto body = chrono_types::make_shared<fea::ChMesh>();
 
-	int numDivX = 45;
+	int numDivX = 55;
 	int numDivY = 0;
-	int numDivZ = 3;
+	int numDivZ = 4;
 	int numNodeX = numDivX + 1;
 	int numNodeY = numDivY + 1;
 	int numNodeZ = numDivZ + 1;
@@ -309,20 +317,14 @@ int main(int argc, char* argv[]) {
 
 				// Direction
 				double dirX = 0;
-				double dirY = 1;
+				double dirY = -1;
 				double dirZ = 0;
 				//printf("\n%f, %f, %f, %f\n", x, y, z, theta);
 
 				// Node
 				auto node = chrono_types::make_shared<ChNodeFEAxyzD>(ChVector<>(x, y, z), ChVector<>(dirX, dirY, dirZ));
 				node->SetMass(0.0);
-
-				// Constraint one end
-				if (i == 0 || i == 1) {
-					auto bodyJoint = chrono_types::make_shared<ChLinkPointFrameGeneric>(true, true, true);
-					bodyJoint->Initialize(node, slider);
-					mphysicalSystem.Add(bodyJoint);
-				}
+				node->SetFixed(true);
 
 				body->AddNode(node);
 			}
@@ -383,7 +385,7 @@ int main(int argc, char* argv[]) {
 		myFsiSystem.GetDataManager(), paramsH, body,
 		myFsiSystem.GetFsiNodes(), myFsiSystem.GetFsiCables(), myFsiSystem.GetFsiShells(),
 		nodeNeighborElement, elementsNodes1D, elementsNodes,
-		false, true, false, true, 0, 0
+		false, true, false, true, 0, 0, 0.01 * M_TO_L
 	);
 	myFsiSystem.SetShellElementsNodes(elementsNodes);
 	myFsiSystem.SetFsiMesh(body);
@@ -409,6 +411,7 @@ int main(int argc, char* argv[]) {
 	double time = 0;
 	int frameCurrent = -1;
 	double tFrame = 1.0 / paramsH->out_fps;
+	bool nodesFixed = true;
 	while (time < paramsH->tFinal) {
 		int frameNew = (int)(time / tFrame);
 		if (frameNew > frameCurrent) {
@@ -429,6 +432,27 @@ int main(int argc, char* argv[]) {
 		}
 
 		printf("\nstep: %f, time: %f, current frame: %d\n", paramsH->dT, time, frameCurrent);
+
+		if (time > ts && nodesFixed) {
+			printf("Release nodes and apply constraints\n");
+			int elementIndex = 0;
+			for (int k = 0; k < numNodeZ; k++) { // Loop order MATTERS!!
+				for (int j = 0; j < numNodeY; j++) {
+					for (int i = 0; i < numNodeX; i++) {
+						auto node = std::dynamic_pointer_cast<ChNodeFEAxyzD>(body->GetNode(elementIndex));
+						node->SetFixed(false);
+						// Constraint one end
+						if (i <= 1) {
+							auto bodyJoint = chrono_types::make_shared<ChLinkPointFrameGeneric>(true, true, true);
+							bodyJoint->Initialize(node, slider);
+							mphysicalSystem.Add(bodyJoint);
+						}
+						elementIndex++;
+					}
+				}
+			}
+			nodesFixed = false;
+		}
 
 		// Call the FSI solver
 		try {
