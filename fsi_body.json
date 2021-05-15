@@ -11,10 +11,10 @@
   },
 
   "SPH Parameters": {
-    "Method": "I2SPH", //WCSPH, IISPH, I2SPHH
+    "Method": "I2SPH",
     "Kernel h": 0.02, // 0.02 m
     "Initial Spacing": 0.02, // 0.02 m
-    "Epsilon": 0.0001, // 0.0001 m, minimum particle distance
+    "Epsilon": 0.002, // 0.02 m, minimum particle distance
     "Maximum Velocity": 1.0, // 1m/s
     "XSPH Coefficient": 0.5,
     "Shifting Coefficient": 0.0,
@@ -24,12 +24,14 @@
 
   "Time Stepping": {
     "Adaptive Time stepping": false,
-    "Beta": 0.0, // 1.0 make flex markers experience no fluid force. 
-    "CFL number": 0.5,
+    // This is used for controlling the noise in the FS forces, F_new=beta*F_old+(1-beta)*F_t
+    // beta=1 highly damped force, beta=0 : no modificaiton to force
+    "Beta": 0.0,
+    "CFL number": 0.2,
     "Fluid time step": 10e-4,
     "Solid time step": 1e-4,
     "Maximum time step": 10e-4,
-    "End time": 5.5,
+    "End time": 2.0,
     "Write frame per second": 200
   },
 
@@ -38,11 +40,11 @@
     "Linear solver": "Jacobi",
     "Poisson source term": "Density-Based",
     "Projection method": "Non-Incremental",
-    "Under-relaxation": 0.9, // Decrease to converge
-    "Clamp Pressure": false, // Causes pressure oscillation
+    "Under-relaxation": 0.99,
+    "Clamp Pressure": false, // May cause pressure oscillation
     "Absolute residual": 1e-6,
     "Relative residual": 1e-6,
-    "Maximum Iterations": 500,
+    "Maximum Iterations": 1000,
     "Verbose monitoring": false,
     "Constraint Pressure": false,
     "Average Pressure": 0.0

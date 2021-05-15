@@ -1,3 +1,12 @@
+// NOTE: Modify the source code, line 637 in chrono\src\chrono_fsi\physics\ChFsiForceI2SPH.cu to the following. 
+// Real3 FS_force = (-grad_q_i_conservative / sortedRhoPreMu_old[i_idx].x + laplacian_V * mu_i + paramsD.bodyForce3) * m_i;
+// This is more consistent with the equation in Technical Report TR03 Incompressible Implicit SPH
+// available at the following link. 
+// https://sbel.wisc.edu/technicalreports/
+// Original code results in unreasonably high force and simulation failure. 
+
+// TODO: More validations required for the above modification. 
+
 #include <assert.h>
 #include <stdlib.h>
 #include <ctime>
@@ -8,6 +17,7 @@
 
 #include "chrono/fea/ChElementShellANCF.h"
 #include "chrono/fea/ChLinkPointFrame.h"
+#include "chrono/fea/ChLinkDirFrame.h"
 #include "chrono/fea/ChMesh.h"
 #include "chrono/fea/ChMeshExporter.h"
 
@@ -37,7 +47,7 @@ double S_TO_T = 1e0; // 1s
 
 // Fluid domain dimension
 Real fxDim = 0.8 * M_TO_L;
-Real fyDim = 0.3 * M_TO_L;
+Real fyDim = 0.4 * M_TO_L;
 Real fzDim = 0.3 * M_TO_L;
 
 // Simulation domain dimension
@@ -46,7 +56,7 @@ Real byDim = fyDim;
 Real bzDim = fzDim;
 
 // Solid materials
-double E = 2600e6 * KG_TO_W / M_TO_L / S_TO_T / S_TO_T; // kg*m/s^2/m^2
+double E = 260e6 * KG_TO_W / M_TO_L / S_TO_T / S_TO_T; // kg*m/s^2/m^2
 double nu = 0.38;
 double rhoSolid = 1220 * KG_TO_W / M_TO_L / M_TO_L / M_TO_L;
 double smallNum = 1e-6;
@@ -57,8 +67,8 @@ double beamThickness = 0.003 * M_TO_L;
 double beamHeight = 0.041 * M_TO_L; // Increase a bit to avoid numerical issue
 
 double freq = 1.0; // Swing frequency
-double ts = 0.5 * S_TO_T; // Wait for fluid to settle
-double amplitude = CH_C_PI / S_TO_T * 0; // rad/s
+double ts = 0.0 * S_TO_T; // Wait for fluid to settle
+double amplitude = CH_C_PI / 2 / S_TO_T; // rad/s
 
 double wallOffset = 0.1 * M_TO_L;
 double zOffset = 0.0 * M_TO_L;
@@ -179,7 +189,7 @@ int main(int argc, char* argv[]) {
 	fsi::ChSystemFsi myFsiSystem(mphysicalSystem);
 
 	std::shared_ptr<fsi::SimParams> paramsH = myFsiSystem.GetSimParams();
-	std::string inputJson = "../../chrono-simulation/fsi_body.json"; // loado input from source folder
+	std::string inputJson = "../../chrono-simulation/fsi_body.json"; // load input from source folder
 
 	if (!fsi::utils::ParseJSON(inputJson, paramsH, fsi::mR3(bxDim, byDim, bzDim))) {
 		printf("Invalid json\n");
@@ -258,7 +268,6 @@ int main(int argc, char* argv[]) {
 
 	// Create Solid
 	ChVector<> gravity = ChVector<>(paramsH->gravity.x, paramsH->gravity.y, paramsH->gravity.z);
-	//ChVector<> gravity = ChVector<>(0.0, 0.0, 0.0);
 	mphysicalSystem.Set_G_acc(gravity);
 
 	// Container body
@@ -285,7 +294,7 @@ int main(int argc, char* argv[]) {
 
 	auto motor = chrono_types::make_shared<ChLinkMotorRotationSpeed>();
 	motor->Initialize(slider, container, ChFrame<>(ChVector<>(-beamLength / 2, 0, 0), QUNIT)); // rotate to y directon
-	//auto motor_pos = chrono_types::make_shared<ChFunction_Sine>(0, 1.0, 1);
+	//auto motor_vel = chrono_types::make_shared<ChFunction_Sine>(0, freq, amplitude);
 	auto motor_vel = chrono_types::make_shared<ChFunction_Motor>();
 	motor->SetSpeedFunction(motor_vel);
 	mphysicalSystem.AddLink(motor);
@@ -293,41 +302,39 @@ int main(int argc, char* argv[]) {
 	// Body, curved to positive y
 	auto body = chrono_types::make_shared<fea::ChMesh>();
 
-	int numDivX = 55;
+	int numDivX = 20;
 	int numDivY = 0;
-	int numDivZ = 4;
+	int numDivZ = 2;
 	int numNodeX = numDivX + 1;
 	int numNodeY = numDivY + 1;
 	int numNodeZ = numDivZ + 1;
-	int numElements = numDivX * (numDivY + 1) * numDivZ;
+	int numElements = numDivX * numDivZ;
 	int numNodes = numNodeX * numNodeY * numNodeZ;
 
 	double dx = beamLength / numDivX;
-	double dy = numDivY == 0 ? beamThickness: beamThickness/ numDivY;
+	double dy = beamThickness;
 	double dz = beamHeight / numDivZ;
 
 	// Add nodes to mesh
 	for (int k = 0; k < numNodeZ; k++) { // Loop order MATTERS!!
-		for (int j = 0; j < numNodeY; j++) {
-			for (int i = 0; i < numNodeX; i++) {
-				// Location
-				double x = i * dx - beamLength / 2;
-				double y = j * dy + posBody.y();
-				double z = k * dz - beamHeight / 2 + posBody.z();
+		for (int i = 0; i < numNodeX; i++) {
+			// Location
+			double x = i * dx - beamLength / 2;
+			double y = posBody.y();
+			double z = k * dz - beamHeight / 2 + posBody.z();
 
-				// Direction
-				double dirX = 0;
-				double dirY = -1;
-				double dirZ = 0;
-				//printf("\n%f, %f, %f, %f\n", x, y, z, theta);
+			// Direction
+			double dirX = 0;
+			double dirY = 1; // -1 has wierd behavior
+			double dirZ = 0;
+			//printf("\n%f, %f, %f, %f\n", x, y, z, theta);
 
-				// Node
-				auto node = chrono_types::make_shared<ChNodeFEAxyzD>(ChVector<>(x, y, z), ChVector<>(dirX, dirY, dirZ));
-				node->SetMass(0.0);
-				node->SetFixed(true);
+			// Node
+			auto node = chrono_types::make_shared<ChNodeFEAxyzD>(ChVector<>(x, y, z), ChVector<>(dirX, dirY, dirZ));
+			node->SetMass(0.0);
+			node->SetFixed(true);
 
-				body->AddNode(node);
-			}
+			body->AddNode(node);
 		}
 	}
 
@@ -341,41 +348,39 @@ int main(int argc, char* argv[]) {
 	int elementCount = 0;
 	// Add elements to mesh
 	for (int i = 0; i < numDivX; i++) {
-		for (int j = 0; j < numDivY + 1; j++) {
-			for (int k = 0; k < numDivZ; k++) {
-				// Element CCW node index
-				int nodeAIndex = i + k * numNodeX + j * numNodeX * numNodeZ;
-				int nodeBIndex = i + k * numNodeX + j * numNodeX * numNodeZ + 1;
-				int nodeCIndex = i + (k + 1) * numNodeX + j * numNodeX * numNodeZ + 1;
-				int nodeDIndex = i + (k + 1) * numNodeX + j * numNodeX * numNodeZ;
-				//printf("\n%d, %d, %d, %d, %d\n", elementCount, nodeAIndex, nodeBIndex, nodeCIndex, nodeDIndex);
+		for (int k = 0; k < numDivZ; k++) {
+			// Element CCW node index
+			int nodeAIndex = i + k * numNodeX;
+			int nodeBIndex = i + k * numNodeX + 1;
+			int nodeCIndex = i + (k + 1) * numNodeX + 1;
+			int nodeDIndex = i + (k + 1) * numNodeX;
+			//printf("\n%d, %d, %d, %d, %d\n", elementCount, nodeAIndex, nodeBIndex, nodeCIndex, nodeDIndex);
 
-				// Element
-				auto element = chrono_types::make_shared<ChElementShellANCF>();
-				element->SetNodes(
-					std::dynamic_pointer_cast<ChNodeFEAxyzD>(body->GetNode(nodeAIndex)),
-					std::dynamic_pointer_cast<ChNodeFEAxyzD>(body->GetNode(nodeBIndex)),
-					std::dynamic_pointer_cast<ChNodeFEAxyzD>(body->GetNode(nodeCIndex)),
-					std::dynamic_pointer_cast<ChNodeFEAxyzD>(body->GetNode(nodeDIndex))
-				);
-				element->SetDimensions(dx, dz);
-				element->AddLayer(dy, 0 * CH_C_DEG_TO_RAD, shellMat);
-				element->SetAlphaDamp(0.01);
-				element->SetGravityOn(false);
+			// Element
+			auto element = chrono_types::make_shared<ChElementShellANCF>();
+			element->SetNodes(
+				std::dynamic_pointer_cast<ChNodeFEAxyzD>(body->GetNode(nodeAIndex)),
+				std::dynamic_pointer_cast<ChNodeFEAxyzD>(body->GetNode(nodeBIndex)),
+				std::dynamic_pointer_cast<ChNodeFEAxyzD>(body->GetNode(nodeCIndex)),
+				std::dynamic_pointer_cast<ChNodeFEAxyzD>(body->GetNode(nodeDIndex))
+			);
+			element->SetDimensions(dx, dz);
+			element->AddLayer(dy, 0 * CH_C_DEG_TO_RAD, shellMat);
+			element->SetAlphaDamp(0.01);
+			element->SetGravityOn(false);
 
-				body->AddElement(element);
+			body->AddElement(element);
 
-				elementsNodes[elementCount].push_back(nodeAIndex);
-				elementsNodes[elementCount].push_back(nodeBIndex);
-				elementsNodes[elementCount].push_back(nodeCIndex);
-				elementsNodes[elementCount].push_back(nodeDIndex);
-				nodeNeighborElement[nodeAIndex].push_back(elementCount);
-				nodeNeighborElement[nodeBIndex].push_back(elementCount);
-				nodeNeighborElement[nodeCIndex].push_back(elementCount);
-				nodeNeighborElement[nodeDIndex].push_back(elementCount);
+			elementsNodes[elementCount].push_back(nodeAIndex);
+			elementsNodes[elementCount].push_back(nodeBIndex);
+			elementsNodes[elementCount].push_back(nodeCIndex);
+			elementsNodes[elementCount].push_back(nodeDIndex);
+			nodeNeighborElement[nodeAIndex].push_back(elementCount);
+			nodeNeighborElement[nodeBIndex].push_back(elementCount);
+			nodeNeighborElement[nodeCIndex].push_back(elementCount);
+			nodeNeighborElement[nodeDIndex].push_back(elementCount);
 
-				elementCount++;
-			}
+			elementCount++;
 		}
 	}
 	mphysicalSystem.Add(body);
@@ -385,7 +390,7 @@ int main(int argc, char* argv[]) {
 		myFsiSystem.GetDataManager(), paramsH, body,
 		myFsiSystem.GetFsiNodes(), myFsiSystem.GetFsiCables(), myFsiSystem.GetFsiShells(),
 		nodeNeighborElement, elementsNodes1D, elementsNodes,
-		false, true, false, true, 0, 0, 0.01 * M_TO_L
+		false, true, false, false, 0, 0 // , 0.01 * M_TO_L
 	);
 	myFsiSystem.SetShellElementsNodes(elementsNodes);
 	myFsiSystem.SetFsiMesh(body);
@@ -443,6 +448,9 @@ int main(int argc, char* argv[]) {
 						node->SetFixed(false);
 						// Constraint one end
 						if (i <= 1) {
+							//auto bodyDirJoint = chrono_types::make_shared<ChLinkDirFrame>();
+							//bodyDirJoint->Initialize(node, slider, &ChVector<>(0.0,-1.0,0.0));
+							//mphysicalSystem.Add(bodyDirJoint);
 							auto bodyJoint = chrono_types::make_shared<ChLinkPointFrameGeneric>(true, true, true);
 							bodyJoint->Initialize(node, slider);
 							mphysicalSystem.Add(bodyJoint);
